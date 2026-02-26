@@ -25,11 +25,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://unotag-reconciliation-kk62l71zv-yogi-vijays-projects.vercel.app",
-        "https://unotag-reconciliation.vercel.app"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,6 +57,10 @@ async def root():
             "Cloud CSV storage (Q4: Option C)"
         ]
     }
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
 
 @app.post("/api/reconcile")
 async def reconcile_files(
