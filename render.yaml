@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: bank-reconciliation
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: GEMINI_API_KEY
+        value: AIzaSyAqEgLa6JZ-VrCYC50WZRbHPjxDExCzDUs
+      - key: ENVIRONMENT
+        value: production
