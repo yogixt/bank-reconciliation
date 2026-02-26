@@ -1,0 +1,18 @@
+
+> unotag-bank-reconciliation@1.0.0 dev
+> vite
+
+
+  VITE v5.4.21  ready in 88 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: use --host to expose
+2:05:43 PM [vite] ✨ new dependencies optimized: react-dom/client
+2:05:43 PM [vite] ✨ optimized dependencies changed. reloading
+2:08:02 PM [vite] hmr update /src/App.css
+2:08:02 PM [vite] hmr update /src/App.css
+2:08:06 PM [vite] hmr update /src/App.jsx
+2:08:08 PM [vite] hmr update /src/index.css
+2:08:11 PM [vite] page reload src/main.jsx
+3:06:43 PM [vite] .env changed, restarting server...
+3:06:43 PM [vite] server restarted.

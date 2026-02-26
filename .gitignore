@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+
+# Node
+node_modules/
+dist/
+
+# Environment
+.env
+.env.local
+
+# Runtime data
+backend/search_history.db
+backend/server.log
+backend/outputs/
+backend/temp/
+*.xlsx
+*.csv
+
+# IDE
+.vscode/
+.idea/
+
+# Vercel
+.vercel/
+
+# OS
+.DS_Store

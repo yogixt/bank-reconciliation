@@ -1,0 +1,8 @@
+{
+    "rewrites": [
+        {
+            "source": "/api/(.*)",
+            "destination": "https://unotag-reconciliation-api-production.up.railway.app/api/$1"
+        }
+    ]
+}
