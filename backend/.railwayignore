@@ -5,4 +5,5 @@ outputs/
 temp/
 *.xlsx
 *.csv
-*.txt
+*.log
+search_history.db
