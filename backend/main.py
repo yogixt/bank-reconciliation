@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import pandas as pd
@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import List, Optional
 from dotenv import load_dotenv
 import aiofiles
+import traceback
 
 from database.db import Database
 from agents.gemini_agent import GeminiAgent
@@ -21,7 +22,7 @@ load_dotenv()
 app = FastAPI(
     title="unotag Bank Reconciliation API - Production",
     description="Production-ready reconciliation system with AI",
-    version="3.0.0"
+    version="3.1.0"
 )
 
 app.add_middleware(
@@ -31,6 +32,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Global exception handler to ensure CORS headers on ALL error responses
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    print(f"\n❌ UNHANDLED ERROR: {traceback.format_exc()}\n")
+    response = JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)}
+    )
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # Initialize
 db = Database()
@@ -42,12 +56,23 @@ csv_generator = CSVGenerator()
 os.makedirs('temp', exist_ok=True)
 os.makedirs('outputs', exist_ok=True)
 
+
+async def save_upload_chunked(upload_file: UploadFile, dest_path: str):
+    """Stream uploaded file to disk in 1MB chunks to avoid OOM"""
+    async with aiofiles.open(dest_path, "wb") as out:
+        while True:
+            chunk = await upload_file.read(1024 * 1024)  # 1MB chunks
+            if not chunk:
+                break
+            await out.write(chunk)
+
+
 @app.get("/")
 async def root():
     return {
         "service": "unotag Bank Reconciliation API",
         "status": "operational",
-        "version": "3.0.0",
+        "version": "3.1.0",
         "features": [
             "Smart bank ID extraction",
             "Bridge file parsing (N, N+1 format)",
@@ -79,19 +104,14 @@ async def reconcile_files(
     search_id = task_id # Use the same ID for both for tracking simplicity
     
     try:
-        # Save files to temp directory to avoid OOM killer on Render
+        # Save files to temp directory using chunked streaming to avoid OOM on Render
         temp_bank_path = f"temp/{search_id}_{bank_statement.filename}"
         temp_bridge_path = f"temp/{search_id}_{bridge_file.filename}"
         temp_txn_path = f"temp/{search_id}_{transaction_ids.filename}"
-        
-        with open(temp_bank_path, "wb") as buffer:
-            buffer.write(await bank_statement.read())
-            
-        with open(temp_bridge_path, "wb") as buffer:
-            buffer.write(await bridge_file.read())
-            
-        with open(temp_txn_path, "wb") as buffer:
-            buffer.write(await transaction_ids.read())
+
+        await save_upload_chunked(bank_statement, temp_bank_path)
+        await save_upload_chunked(bridge_file, temp_bridge_path)
+        await save_upload_chunked(transaction_ids, temp_txn_path)
         
         # Create task in database
         db.create_task(task_id)
