@@ -54,6 +54,18 @@ class Database:
                 FOREIGN KEY (search_id) REFERENCES search_history(search_id)
             )
         ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS task_status (
+                task_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL,
+                progress INTEGER DEFAULT 0,
+                message TEXT,
+                result TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        ''')
         
         conn.commit()
         conn.close()
@@ -181,3 +193,70 @@ class Database:
         conn.close()
         
         return [dict(row) for row in rows]
+
+    def create_task(self, task_id: str):
+        """Create a new background task record"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            INSERT INTO task_status (task_id, status, progress, message, created_at, updated_at)
+            VALUES (?, 'processing', 0, 'Starting reconciliation...', ?, ?)
+        ''', (task_id, now, now))
+        conn.commit()
+        conn.close()
+
+    def update_task_progress(self, task_id: str, progress: int, message: str):
+        """Update task progress and message"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            UPDATE task_status 
+            SET progress = ?, message = ?, updated_at = ?
+            WHERE task_id = ?
+        ''', (progress, message, now, task_id))
+        conn.commit()
+        conn.close()
+
+    def complete_task(self, task_id: str, result: Dict):
+        """Mark task as completed"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            UPDATE task_status 
+            SET status = 'completed', progress = 100, message = 'Complete', result = ?, updated_at = ?
+            WHERE task_id = ?
+        ''', (json.dumps(result), now, task_id))
+        conn.commit()
+        conn.close()
+
+    def fail_task(self, task_id: str, error_message: str):
+        """Mark task as failed"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        now = datetime.now().isoformat()
+        cursor.execute('''
+            UPDATE task_status 
+            SET status = 'failed', message = ?, updated_at = ?
+            WHERE task_id = ?
+        ''', (error_message, now, task_id))
+        conn.commit()
+        conn.close()
+
+    def get_task_status(self, task_id: str) -> Optional[Dict]:
+        """Get the current status of a background task"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM task_status WHERE task_id = ?', (task_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            data = dict(row)
+            if data['result']:
+                data['result'] = json.loads(data['result'])
+            return data
+        return None

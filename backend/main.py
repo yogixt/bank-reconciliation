@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Query
+from fastapi import FastAPI, UploadFile, File, BackgroundTasks, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 import pandas as pd
@@ -14,6 +14,7 @@ from database.db import Database
 from agents.gemini_agent import GeminiAgent
 from agents.reconciler_agent import ReconcilerAgent
 from utils.csv_generator import CSVGenerator
+from tasks.reconciliation_task import process_reconciliation_task
 
 load_dotenv()
 
@@ -64,179 +65,64 @@ async def health_check():
 
 @app.post("/api/reconcile")
 async def reconcile_files(
+    background_tasks: BackgroundTasks,
     bank_statement: UploadFile = File(...),
     bridge_file: UploadFile = File(...),
     transaction_ids: UploadFile = File(...)
 ):
     """
-    Main reconciliation endpoint
-    Processes files and returns detailed results
+    Main reconciliation endpoint (ASYNC)
+    Accepts files, creates a background task, and returns immediately
     """
     
-    search_id = str(uuid.uuid4())
-    start_time = datetime.now()
+    task_id = str(uuid.uuid4())
+    search_id = task_id # Use the same ID for both for tracking simplicity
     
     try:
-        print(f"\n{'='*80}")
-        print(f"🚀 SEARCH [{search_id}] - Bank Reconciliation")
-        print(f"{'='*80}\n")
-        
-        # ============================================
-        # STEP 1: READ BANK STATEMENT
-        # ============================================
-        print("📊 STEP 1: Reading Bank Statement")
-        
+        # We must read the files here because UploadFile handles close when request ends
         bank_content = await bank_statement.read()
-        
-        # Find header row
-        df_raw = pd.read_excel(io.BytesIO(bank_content), header=None)
-        header_row = None
-        for i, row in df_raw.iterrows():
-            if 'DATE' in str(row.values):
-                header_row = i
-                break
-        
-        if header_row is None:
-            raise ValueError("Could not find header row in bank statement")
-        
-        # Read with correct header
-        bank_df = pd.read_excel(io.BytesIO(bank_content), skiprows=header_row, header=0)
-        
-        print(f"  ✓ Bank statement loaded: {len(bank_df)} transactions")
-        
-        # ============================================
-        # STEP 2: EXTRACT BANK IDs
-        # ============================================
-        print("\n🧠 STEP 2: Extracting Bank IDs from Descriptions")
-        
-        def extract_bank_id(description):
-            """Extract bank ID from IMPS description (Part 3)"""
-            try:
-                parts = str(description).split(' - ')
-                if len(parts) > 3:
-                    return parts[3].strip().upper()
-                return None
-            except:
-                return None
-        
-        bank_df['bank_id'] = bank_df['DESCRIPTION'].apply(extract_bank_id)
-        bank_df = bank_df.dropna(subset=['bank_id'])
-        
-        print(f"  ✓ Extracted {len(bank_df)} bank IDs")
-        
-        # ============================================
-        # STEP 3: PARSE BRIDGE FILE (N, N+1 format)
-        # ============================================
-        print("\n🔗 STEP 3: Parsing Bridge File")
-        
         bridge_content = await bridge_file.read()
-        bridge_text = bridge_content.decode('utf-8')
-        bridge_lines = [line.strip() for line in bridge_text.split('\n') if line.strip()]
-        
-        bridge_map = {}
-        for i in range(0, len(bridge_lines), 2):
-            if i + 1 < len(bridge_lines):
-                txn_id = bridge_lines[i].strip().upper()
-                bank_id = bridge_lines[i + 1].strip().upper()
-                bridge_map[txn_id] = bank_id
-        
-        print(f"  ✓ Bridge file parsed: {len(bridge_map)} mappings")
-        
-        # ============================================
-        # STEP 4: READ TRANSACTION IDs TO SEARCH
-        # ============================================
-        print("\n📝 STEP 4: Reading Transaction IDs")
-        
         txn_content = await transaction_ids.read()
-        txn_text = txn_content.decode('utf-8')
         
-        if ',' in txn_text or '\t' in txn_text:
-            txn_df = pd.read_csv(io.StringIO(txn_text))
-            txn_search_list = txn_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
-        else:
-            txn_search_list = [line.strip().upper() for line in txn_text.split('\n') if line.strip()]
+        # Create task in database
+        db.create_task(task_id)
         
-        txn_search_list = list(set(txn_search_list))
-        
-        print(f"  ✓ Transaction IDs to search: {len(txn_search_list)}")
-        
-        # ============================================
-        # STEP 5: RECONCILIATION
-        # ============================================
-        print("\n⚡ STEP 5: Performing Reconciliation")
-        
-        reconciliation_result = reconciler_agent.reconcile(
-            bank_df,
-            bridge_map,
-            txn_search_list
+        # Dispatch background task immediately
+        background_tasks.add_task(
+            process_reconciliation_task,
+            task_id=task_id,
+            search_id=search_id,
+            bank_content=bank_content,
+            bridge_content=bridge_content,
+            txn_content=txn_content,
+            bank_filename=bank_statement.filename,
+            bridge_filename=bridge_file.filename,
+            txn_filename=transaction_ids.filename,
+            db_instance=db,
+            reconciler_agent_instance=reconciler_agent,
+            csv_generator_instance=csv_generator
         )
-        
-        # ============================================
-        # STEP 6: GENERATE CSV
-        # ============================================
-        print("\n📄 STEP 6: Generating CSV Report")
-        
-        csv_path = csv_generator.generate_reconciliation_csv(
-            reconciliation_result['results'],
-            reconciliation_result['not_in_bridge'],
-            reconciliation_result['not_in_statement'],
-            search_id,
-            {
-                'bank_statement': bank_statement.filename,
-                'bridge_file': bridge_file.filename,
-                'transaction_ids': transaction_ids.filename
-            }
-        )
-        
-        # ============================================
-        # STEP 7: SAVE TO DATABASE
-        # ============================================
-        print("\n💾 STEP 7: Saving to Database")
-        
-        total_time = (datetime.now() - start_time).total_seconds()
-        
-        # Save search history
-        db.save_search_history({
-            'search_id': search_id,
-            'timestamp': start_time.isoformat(),
-            'bank_statement_file': bank_statement.filename,
-            'bridge_file': bridge_file.filename,
-            'transaction_ids_file': transaction_ids.filename,
-            'total_searched': reconciliation_result['statistics']['total_searched'],
-            'total_found': reconciliation_result['statistics']['total_found'],
-            'success_count': reconciliation_result['statistics']['success_count'],
-            'failed_count': reconciliation_result['statistics']['failed_count'],
-            'not_in_bridge': reconciliation_result['statistics']['not_in_bridge'],
-            'not_in_statement': reconciliation_result['statistics']['not_in_statement'],
-            'total_success_amount': reconciliation_result['statistics']['total_success_amount'],
-            'total_failed_amount': reconciliation_result['statistics']['total_failed_amount'],
-            'processing_time': total_time,
-            'csv_output_path': csv_path
-        })
-        
-        # Save transaction details
-        all_transactions = (
-            reconciliation_result['results'] +
-            reconciliation_result['not_in_bridge'] +
-            reconciliation_result['not_in_statement']
-        )
-        db.save_transaction_details(search_id, all_transactions)
-        
-        print(f"\n{'='*80}")
-        print(f"✅ RECONCILIATION COMPLETE in {total_time:.2f}s")
-        print(f"{'='*80}\n")
         
         return {
-            "status": "success",
-            "search_id": search_id,
-            "summary": reconciliation_result['statistics'],
-            "csv_download_url": f"/api/download-csv/{search_id}",
-            "timestamp": start_time.isoformat()
+            "status": "accepted",
+            "task_id": task_id,
+            "message": "Reconciliation task started in the background."
         }
         
     except Exception as e:
-        print(f"\n❌ ERROR: {str(e)}\n")
+        print(f"\n❌ STARTUP ERROR: {str(e)}\n")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reconcile/status/{task_id}")
+async def get_reconciliation_status(task_id: str):
+    """
+    Polling endpoint for frontend to check the progress of the task
+    """
+    status_data = db.get_task_status(task_id)
+    if not status_data:
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    return status_data
 
 @app.get("/api/download-csv/{search_id}")
 async def download_csv(search_id: str):
