@@ -1,3 +1,44 @@
+/* ── Design Tokens ─────────────────────────────────── */
+:root {
+    /* Palette */
+    --bg:          #0a0a0f;
+    --surface:     rgba(255, 255, 255, 0.05);
+    --surface-hi:  rgba(255, 255, 255, 0.08);
+    --border:      rgba(255, 255, 255, 0.08);
+    --border-hi:   rgba(255, 255, 255, 0.15);
+    --text:        #e2e8f0;
+    --text-muted:  #94a3b8;
+    --teal:        #00d4aa;
+    --violet:      #7c5cfc;
+    --teal-glow:   rgba(0, 212, 170, 0.35);
+    --violet-glow: rgba(124, 92, 252, 0.35);
+    --danger:      #ef4444;
+
+    /* Typography */
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+    /* Spacing */
+    --sp-xs: 0.25rem;
+    --sp-sm: 0.5rem;
+    --sp-md: 1rem;
+    --sp-lg: 1.5rem;
+    --sp-xl: 2rem;
+    --sp-2xl: 3rem;
+    --sp-3xl: 4rem;
+
+    /* Radii */
+    --r-sm: 8px;
+    --r-md: 16px;
+    --r-lg: 24px;
+    --r-full: 9999px;
+
+    /* Shadows & effects */
+    --glass-blur: blur(18px);
+    --glass-border: 1px solid var(--border);
+    --transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Reset & Base ─────────────────────────────────── */
 * {
     margin: 0;
     padding: 0;
@@ -5,10 +46,17 @@
 }
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
+}
+
+::selection {
+    background: var(--violet);
+    color: #fff;
 }
 
 #root {

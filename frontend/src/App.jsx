@@ -180,13 +180,33 @@ function App() {
         }
     };
 
+    const handleButtonClick = (e) => {
+        if (processing || !files.bankStatement || !files.bridgeFile || !files.transactionIds) return;
+
+        // Create ripple
+        const btn = e.currentTarget;
+        const rect = btn.getBoundingClientRect();
+        const ripple = document.createElement('span');
+        ripple.className = 'ripple';
+        const size = Math.max(rect.width, rect.height);
+        ripple.style.width = ripple.style.height = `${size}px`;
+        ripple.style.left = `${e.clientX - rect.left - size / 2}px`;
+        ripple.style.top = `${e.clientY - rect.top - size / 2}px`;
+        btn.appendChild(ripple);
+        ripple.addEventListener('animationend', () => ripple.remove());
+
+        handleSubmit();
+    };
+
     return (
         <div className="app">
+            <div className="mesh-blob" />
+
             <header className="header">
                 <div className="header-content">
                     <div className="logo">
                         <div className="logo-icon">
-                            <svg width="40" height="40" viewBox="0 0 40 40">
+                            <svg width="32" height="32" viewBox="0 0 40 40">
                                 <circle cx="20" cy="20" r="16" stroke="white" strokeWidth="3" fill="none" />
                                 <path d="M14 20L18 24L26 16" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
                             </svg>
@@ -196,7 +216,6 @@ function App() {
                             <p>Bank Reconciliation System</p>
                         </div>
                     </div>
-
                 </div>
             </header>
 
@@ -217,7 +236,8 @@ function App() {
                                     file={files.bankStatement}
                                     onChange={(file) => handleFileChange('bankStatement', file)}
                                     step="1"
-                                    color="purple"
+                                    accentColor="var(--teal)"
+                                    entranceDelay="0s"
                                 />
                                 <FileUploadCard
                                     title="Bridge File"
@@ -225,7 +245,8 @@ function App() {
                                     file={files.bridgeFile}
                                     onChange={(file) => handleFileChange('bridgeFile', file)}
                                     step="2"
-                                    color="pink"
+                                    accentColor="var(--violet)"
+                                    entranceDelay="0.1s"
                                 />
                                 <FileUploadCard
                                     title="Transaction IDs"
@@ -233,7 +254,8 @@ function App() {
                                     file={files.transactionIds}
                                     onChange={(file) => handleFileChange('transactionIds', file)}
                                     step="3"
-                                    color="blue"
+                                    accentColor="#e040fb"
+                                    entranceDelay="0.2s"
                                 />
                             </div>
 
@@ -251,7 +273,7 @@ function App() {
 
                             <button
                                 className={`action-button ${processing ? 'processing' : ''} ${!files.bankStatement || !files.bridgeFile || !files.transactionIds ? 'disabled' : ''}`}
-                                onClick={handleSubmit}
+                                onClick={handleButtonClick}
                                 disabled={processing || !files.bankStatement || !files.bridgeFile || !files.transactionIds}
                             >
                                 {processing ? (
@@ -285,7 +307,7 @@ function App() {
     );
 }
 
-function FileUploadCard({ title, subtitle, file, onChange, step, color }) {
+function FileUploadCard({ title, subtitle, file, onChange, step, accentColor, entranceDelay }) {
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDragOver = (e) => {
@@ -313,7 +335,8 @@ function FileUploadCard({ title, subtitle, file, onChange, step, color }) {
 
     return (
         <div
-            className={`upload-card ${color} ${isDragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
+            className={`upload-card ${isDragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
+            style={{ '--accent': accentColor, '--entrance-delay': entranceDelay }}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -331,7 +354,7 @@ function FileUploadCard({ title, subtitle, file, onChange, step, color }) {
             <label htmlFor={`file-${step}`} className="upload-label">
                 <div className="upload-icon-wrapper">
                     <div className="upload-icon">
-                        <svg width="50" height="50" viewBox="0 0 50 50">
+                        <svg width="40" height="40" viewBox="0 0 50 50">
                             {file ? (
                                 <path d="M16 25L21 30L34 17M43 25C43 35.4934 34.4934 44 25 44C15.5066 44 7 35.4934 7 25C7 14.5066 15.5066 6 25 6C34.4934 6 43 14.5066 43 25Z"
                                     stroke="white"
@@ -430,11 +453,18 @@ function ProcessingStatus({ progress, statusMessage }) {
 function ResultsView({ result, onReset, onDownload }) {
     const matchRate = parseFloat(result.summary.match_rate);
 
+    const stats = [
+        { label: 'Total Records', value: result.summary.total_searched.toLocaleString(), delay: '0s' },
+        { label: 'Successfully Matched', value: result.summary.total_found.toLocaleString(), delay: '0.1s' },
+        { label: 'Not in Bridge', value: result.summary.not_in_bridge.toLocaleString(), delay: '0.2s' },
+        { label: 'Not in Statement', value: result.summary.not_in_statement.toLocaleString(), delay: '0.3s' },
+    ];
+
     return (
         <div className="results-container">
             <div className="success-header">
                 <div className="success-icon">
-                    <svg width="64" height="64" viewBox="0 0 64 64">
+                    <svg width="52" height="52" viewBox="0 0 64 64">
                         <circle cx="32" cy="32" r="28" stroke="white" strokeWidth="4" fill="none" />
                         <path d="M20 32L28 40L44 24" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -444,51 +474,42 @@ function ResultsView({ result, onReset, onDownload }) {
             </div>
 
             <div className="match-rate-card">
-                <svg width="240" height="240" viewBox="0 0 240 240">
+                <svg width="220" height="220" viewBox="0 0 240 240">
                     <defs>
                         <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                            <stop offset="0%" stopColor="#667eea" />
-                            <stop offset="100%" stopColor="#764ba2" />
+                            <stop offset="0%" stopColor="#00d4aa" />
+                            <stop offset="100%" stopColor="#7c5cfc" />
                         </linearGradient>
                     </defs>
-                    <circle cx="120" cy="120" r="100" fill="none" stroke="#f0f4f8" strokeWidth="16" />
+                    <circle cx="120" cy="120" r="100" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="14" />
                     <circle
-                        cx="120" cy="120" r="100" fill="none" stroke="url(#progressGradient)" strokeWidth="16"
+                        cx="120" cy="120" r="100" fill="none" stroke="url(#progressGradient)" strokeWidth="14"
                         strokeDasharray={`${matchRate * 6.28} 628`}
                         strokeLinecap="round"
                         transform="rotate(-90 120 120)"
                     />
-                    <text x="120" y="110" textAnchor="middle" dominantBaseline="middle" fontSize="60" fontWeight="900" fill="#2d3748">
+                    <text x="120" y="110" textAnchor="middle" dominantBaseline="middle" fontSize="56" fontWeight="900" fill="#e2e8f0">
                         {matchRate.toFixed(0)}%
                     </text>
-                    <text x="120" y="150" textAnchor="middle" dominantBaseline="middle" fontSize="18" fontWeight="700" fill="#718096">
+                    <text x="120" y="150" textAnchor="middle" dominantBaseline="middle" fontSize="16" fontWeight="700" fill="#94a3b8">
                         Match Rate
                     </text>
                 </svg>
             </div>
 
             <div className="stats-grid">
-                <StatCard
-                    label="Total Records"
-                    value={result.summary.total_searched.toLocaleString()}
-                    color="purple"
-                />
-                <StatCard
-                    label="Successfully Matched"
-                    value={result.summary.total_found.toLocaleString()}
-                    color="pink"
-                    highlight
-                />
-                <StatCard
-                    label="Not in Bridge"
-                    value={result.summary.not_in_bridge.toLocaleString()}
-                    color="blue"
-                />
-                <StatCard
-                    label="Not in Statement"
-                    value={result.summary.not_in_statement.toLocaleString()}
-                    color="yellow"
-                />
+                {stats.map((stat) => (
+                    <div
+                        key={stat.label}
+                        className="stat-card"
+                        style={{ '--entrance-delay': stat.delay }}
+                    >
+                        <div className="stat-content">
+                            <p className="stat-label">{stat.label}</p>
+                            <p className="stat-value">{stat.value}</p>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             <div className="action-buttons">
@@ -505,17 +526,6 @@ function ResultsView({ result, onReset, onDownload }) {
                     </svg>
                     <span>New Reconciliation</span>
                 </button>
-            </div>
-        </div>
-    );
-}
-
-function StatCard({ label, value, color, highlight }) {
-    return (
-        <div className={`stat-card ${color} ${highlight ? 'highlight' : ''}`}>
-            <div className="stat-content">
-                <p className="stat-label">{label}</p>
-                <p className="stat-value">{value}</p>
             </div>
         </div>
     );

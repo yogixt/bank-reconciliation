@@ -28,18 +28,21 @@ async def process_reconciliation_task(
         # Step 1: Read Bank Statement
         db_instance.update_task_progress(task_id, 10, "Reading Bank Statement...")
         
-        # Read directly from temp path
+        # Read once, find header in memory (avoids slow double-read)
         df_raw = pd.read_excel(bank_path, header=None)
         header_row = None
         for i, row in df_raw.iterrows():
             if 'DATE' in str(row.values):
                 header_row = i
                 break
-                
+
         if header_row is None:
             raise ValueError("Could not find header row in bank statement")
-            
-        bank_df = pd.read_excel(bank_path, skiprows=header_row, header=0)
+
+        # Reuse the already-loaded data instead of reading the file again
+        bank_df = df_raw.iloc[header_row + 1:].copy()
+        bank_df.columns = df_raw.iloc[header_row].values
+        bank_df = bank_df.reset_index(drop=True)
         
         # Step 2: Extract Bank IDs
         db_instance.update_task_progress(task_id, 20, "Extracting Bank IDs...")
