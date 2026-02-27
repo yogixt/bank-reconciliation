@@ -39,19 +39,52 @@ function App() {
 
         let taskId = null;
 
-        // Step 1: Submit files and get Task ID
-        try {
-            const response = await fetch(`${API_URL}/api/reconcile`, {
-                method: 'POST',
-                body: formData
-            });
+        let response = null;
+        let retryCount = 0;
+        const maxRetries = 2;
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.detail || 'Failed to start reconciliation');
+        while (retryCount <= maxRetries) {
+            try {
+                response = await fetch(`${API_URL}/api/reconcile`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    break;
+                }
+
+                if (response.status === 502 || response.status === 503 || response.status === 504) {
+                    retryCount++;
+                    setStatusMessage(`Starting server... (Attempt ${retryCount}/${maxRetries + 1})`);
+                    await new Promise(resolve => setTimeout(resolve, 4000));
+                } else {
+                    break;
+                }
+            } catch (err) {
+                retryCount++;
+                setStatusMessage(`Connecting to server... (Attempt ${retryCount}/${maxRetries + 1})`);
+                await new Promise(resolve => setTimeout(resolve, 4000));
+            }
+        }
+
+        try {
+            if (!response || !response.ok) {
+                let errorMessage = 'Failed to start reconciliation';
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.detail || errorMessage;
+                } catch (e) {
+                    errorMessage = response ? `Server Error: ${response.status}` : 'Cannot reach server. Please wait a moment and try again.';
+                }
+                throw new Error(errorMessage);
             }
 
             const data = await response.json();
+            if (!data.task_id) {
+                throw new Error('No task ID received from server');
+            }
+
             taskId = data.task_id;
             setStatusMessage('Reconciliation started in background...');
         } catch (err) {
