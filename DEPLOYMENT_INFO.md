@@ -2,11 +2,11 @@
 
 ## Live URLs
 - Frontend: https://unotag-reconciliation.vercel.app
-- Backend API: https://unotag-reconciliation-api-production.up.railway.app
+- Backend API: https://bank-reconciliation.onrender.com
 
 ## Credentials
 - Gemini API Key: AIzaSyAqEgLa6JZ-VrCYC50WZRbHPjxDExCzDUs
-- Railway Project: unotag-reconciliation-api
+- Render Project: bank-reconciliation
 - Vercel Project: unotag-reconciliation
 
 ## Management
