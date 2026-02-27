@@ -197,20 +197,6 @@ function App() {
                         </div>
                     </div>
 
-                    <div className="header-badges">
-                        <div className="badge badge-purple">
-                            <svg width="20" height="20" viewBox="0 0 20 20">
-                                <path d="M10 2L13 8L19 9L14.5 13.5L15.5 19.5L10 16.5L4.5 19.5L5.5 13.5L1 9L7 8L10 2Z" fill="white" />
-                            </svg>
-                            <span>100% Accurate</span>
-                        </div>
-                        <div className="badge badge-blue">
-                            <svg width="20" height="20" viewBox="0 0 20 20">
-                                <path d="M10 4L13 7M13 7L16 4M13 7V13M19 10C19 14.9706 14.9706 19 10 19C5.02944 19 1 14.9706 1 10C1 5.02944 5.02944 1 10 1" stroke="white" strokeWidth="2" strokeLinecap="round" />
-                            </svg>
-                            <span>Lightning Fast</span>
-                        </div>
-                    </div>
                 </div>
             </header>
 
@@ -294,7 +280,6 @@ function App() {
             </main>
 
             <footer className="footer">
-                <p>2024 UNOTAG - Built for accuracy and speed</p>
             </footer>
         </div>
     );
