@@ -20,6 +20,23 @@ function App() {
         setError(null);
     };
 
+    const wakeUpServer = async () => {
+        const maxAttempts = 10;
+        for (let i = 1; i <= maxAttempts; i++) {
+            try {
+                setStatusMessage(`Waking up server... (Attempt ${i}/${maxAttempts})`);
+                const res = await fetch(`${API_URL}/api/health`, { signal: AbortSignal.timeout(10000) });
+                if (res.ok) return true;
+            } catch (err) {
+                // Server not ready yet
+            }
+            if (i < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+        }
+        return false;
+    };
+
     const handleSubmit = async () => {
         if (!files.bankStatement || !files.bridgeFile || !files.transactionIds) {
             setError('Please upload all three files to continue');
@@ -30,7 +47,18 @@ function App() {
         setError(null);
         setResult(null);
         setProgress(0);
-        setStatusMessage('Starting upload...');
+        setStatusMessage('Connecting to server...');
+
+        // Step 1: Wake up the server first (handles Render cold starts)
+        const serverReady = await wakeUpServer();
+        if (!serverReady) {
+            setError('Server is unavailable. Please try again in a few minutes.');
+            setProcessing(false);
+            setProgress(0);
+            return;
+        }
+
+        setStatusMessage('Server ready. Uploading files...');
 
         const formData = new FormData();
         formData.append('bank_statement', files.bankStatement);
@@ -41,7 +69,7 @@ function App() {
 
         let response = null;
         let retryCount = 0;
-        const maxRetries = 2;
+        const maxRetries = 3;
 
         while (retryCount <= maxRetries) {
             try {
@@ -56,15 +84,15 @@ function App() {
 
                 if (response.status === 502 || response.status === 503 || response.status === 504) {
                     retryCount++;
-                    setStatusMessage(`Starting server... (Attempt ${retryCount}/${maxRetries + 1})`);
-                    await new Promise(resolve => setTimeout(resolve, 4000));
+                    setStatusMessage(`Server warming up... (Attempt ${retryCount + 1}/${maxRetries + 1})`);
+                    await new Promise(resolve => setTimeout(resolve, 5000));
                 } else {
                     break;
                 }
             } catch (err) {
                 retryCount++;
-                setStatusMessage(`Connecting to server... (Attempt ${retryCount}/${maxRetries + 1})`);
-                await new Promise(resolve => setTimeout(resolve, 4000));
+                setStatusMessage(`Reconnecting to server... (Attempt ${retryCount + 1}/${maxRetries + 1})`);
+                await new Promise(resolve => setTimeout(resolve, 5000));
             }
         }
 
@@ -75,7 +103,7 @@ function App() {
                     const errorData = await response.json();
                     errorMessage = errorData.detail || errorMessage;
                 } catch (e) {
-                    errorMessage = response ? `Server Error: ${response.status}` : 'Cannot reach server. Please wait a moment and try again.';
+                    errorMessage = response ? `Server Error: ${response.status}` : 'Cannot reach server. The server may be sleeping — please try again in a minute.';
                 }
                 throw new Error(errorMessage);
             }
