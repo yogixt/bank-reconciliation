@@ -11,6 +11,7 @@ function App() {
     });
     const [processing, setProcessing] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [statusMessage, setStatusMessage] = useState('');
     const [result, setResult] = useState(null);
     const [error, setError] = useState(null);
 
@@ -29,22 +30,16 @@ function App() {
         setError(null);
         setResult(null);
         setProgress(0);
-
-        const progressInterval = setInterval(() => {
-            setProgress(prev => {
-                if (prev >= 90) {
-                    clearInterval(progressInterval);
-                    return prev;
-                }
-                return prev + 10;
-            });
-        }, 200);
+        setStatusMessage('Starting upload...');
 
         const formData = new FormData();
         formData.append('bank_statement', files.bankStatement);
         formData.append('bridge_file', files.bridgeFile);
         formData.append('transaction_ids', files.transactionIds);
 
+        let taskId = null;
+
+        // Step 1: Submit files and get Task ID
         try {
             const response = await fetch(`${API_URL}/api/reconcile`, {
                 method: 'POST',
@@ -53,23 +48,47 @@ function App() {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.detail || 'Reconciliation failed');
+                throw new Error(errorData.detail || 'Failed to start reconciliation');
             }
 
             const data = await response.json();
-            clearInterval(progressInterval);
-            setProgress(100);
-
-            setTimeout(() => {
-                setResult(data);
-                setProcessing(false);
-            }, 500);
+            taskId = data.task_id;
+            setStatusMessage('Reconciliation started in background...');
         } catch (err) {
-            clearInterval(progressInterval);
             setError(err.message);
             setProcessing(false);
             setProgress(0);
+            return;
         }
+
+        // Step 2: Poll for progress
+        const pollInterval = setInterval(async () => {
+            try {
+                const statusResponse = await fetch(`${API_URL}/api/reconcile/status/${taskId}`);
+                if (!statusResponse.ok) {
+                    throw new Error('Failed to fetch task status');
+                }
+
+                const statusData = await statusResponse.json();
+
+                setProgress(statusData.progress);
+                setStatusMessage(statusData.message || 'Processing...');
+
+                if (statusData.status === 'completed') {
+                    clearInterval(pollInterval);
+                    setResult(statusData.result);
+                    setProcessing(false);
+                } else if (statusData.status === 'failed') {
+                    clearInterval(pollInterval);
+                    setError(statusData.message || 'Reconciliation failed during processing.');
+                    setProcessing(false);
+                    setProgress(0);
+                }
+            } catch (err) {
+                // If polling briefly fails, we can just let the next interval try again
+                console.error("Polling error:", err);
+            }
+        }, 1500);
     };
 
     const handleReset = () => {
@@ -204,7 +223,7 @@ function App() {
                                 )}
                             </button>
 
-                            {processing && <ProcessingStatus progress={progress} />}
+                            {processing && <ProcessingStatus progress={progress} statusMessage={statusMessage} />}
                         </>
                     ) : (
                         <ResultsView result={result} onReset={handleReset} onDownload={handleDownload} />
@@ -317,8 +336,9 @@ function FileUploadCard({ title, subtitle, file, onChange, step, color }) {
     );
 }
 
-function ProcessingStatus({ progress }) {
+function ProcessingStatus({ progress, statusMessage }) {
     const getStatusText = () => {
+        if (statusMessage) return statusMessage;
         if (progress < 30) return 'Reading files...';
         if (progress < 60) return 'Extracting data...';
         if (progress < 90) return 'Matching records...';
