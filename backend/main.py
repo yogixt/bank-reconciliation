@@ -79,10 +79,19 @@ async def reconcile_files(
     search_id = task_id # Use the same ID for both for tracking simplicity
     
     try:
-        # We must read the files here because UploadFile handles close when request ends
-        bank_content = await bank_statement.read()
-        bridge_content = await bridge_file.read()
-        txn_content = await transaction_ids.read()
+        # Save files to temp directory to avoid OOM killer on Render
+        temp_bank_path = f"temp/{search_id}_{bank_statement.filename}"
+        temp_bridge_path = f"temp/{search_id}_{bridge_file.filename}"
+        temp_txn_path = f"temp/{search_id}_{transaction_ids.filename}"
+        
+        with open(temp_bank_path, "wb") as buffer:
+            buffer.write(await bank_statement.read())
+            
+        with open(temp_bridge_path, "wb") as buffer:
+            buffer.write(await bridge_file.read())
+            
+        with open(temp_txn_path, "wb") as buffer:
+            buffer.write(await transaction_ids.read())
         
         # Create task in database
         db.create_task(task_id)
@@ -92,9 +101,9 @@ async def reconcile_files(
             process_reconciliation_task,
             task_id=task_id,
             search_id=search_id,
-            bank_content=bank_content,
-            bridge_content=bridge_content,
-            txn_content=txn_content,
+            bank_path=temp_bank_path,
+            bridge_path=temp_bridge_path,
+            txn_path=temp_txn_path,
             bank_filename=bank_statement.filename,
             bridge_filename=bridge_file.filename,
             txn_filename=transaction_ids.filename,

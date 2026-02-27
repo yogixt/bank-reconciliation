@@ -9,9 +9,9 @@ import asyncio
 async def process_reconciliation_task(
     task_id: str,
     search_id: str,
-    bank_content: bytes,
-    bridge_content: bytes,
-    txn_content: bytes,
+    bank_path: str,
+    bridge_path: str,
+    txn_path: str,
     bank_filename: str,
     bridge_filename: str,
     txn_filename: str,
@@ -28,8 +28,8 @@ async def process_reconciliation_task(
         # Step 1: Read Bank Statement
         db_instance.update_task_progress(task_id, 10, "Reading Bank Statement...")
         
-        # Find header row
-        df_raw = pd.read_excel(io.BytesIO(bank_content), header=None)
+        # Read directly from temp path
+        df_raw = pd.read_excel(bank_path, header=None)
         header_row = None
         for i, row in df_raw.iterrows():
             if 'DATE' in str(row.values):
@@ -39,7 +39,7 @@ async def process_reconciliation_task(
         if header_row is None:
             raise ValueError("Could not find header row in bank statement")
             
-        bank_df = pd.read_excel(io.BytesIO(bank_content), skiprows=header_row, header=0)
+        bank_df = pd.read_excel(bank_path, skiprows=header_row, header=0)
         
         # Step 2: Extract Bank IDs
         db_instance.update_task_progress(task_id, 20, "Extracting Bank IDs...")
@@ -59,7 +59,9 @@ async def process_reconciliation_task(
         # Step 3: Parse Bridge File
         db_instance.update_task_progress(task_id, 30, "Parsing Bridge File...")
         
-        bridge_text = bridge_content.decode('utf-8')
+        with open(bridge_path, 'r', encoding='utf-8') as f:
+            bridge_text = f.read()
+            
         bridge_lines = [line.strip() for line in bridge_text.split('\n') if line.strip()]
         
         bridge_map = {}
@@ -72,9 +74,11 @@ async def process_reconciliation_task(
         # Step 4: Parse Transaction IDs
         db_instance.update_task_progress(task_id, 40, "Reading Transaction IDs...")
         
-        txn_text = txn_content.decode('utf-8')
+        with open(txn_path, 'r', encoding='utf-8') as f:
+            txn_text = f.read()
+            
         if ',' in txn_text or '\t' in txn_text:
-            txn_df = pd.read_csv(io.StringIO(txn_text))
+            txn_df = pd.read_csv(txn_path)
             txn_search_list = txn_df.iloc[:, 0].astype(str).str.strip().str.upper().tolist()
         else:
             txn_search_list = [line.strip().upper() for line in txn_text.split('\n') if line.strip()]
@@ -148,3 +152,11 @@ async def process_reconciliation_task(
         
     except Exception as e:
         db_instance.fail_task(task_id, str(e))
+    finally:
+        # Cleanup temporary files
+        try:
+            if os.path.exists(bank_path): os.remove(bank_path)
+            if os.path.exists(bridge_path): os.remove(bridge_path)
+            if os.path.exists(txn_path): os.remove(txn_path)
+        except Exception as cleanup_error:
+            print(f"Failed to cleanup temp files: {cleanup_error}")
