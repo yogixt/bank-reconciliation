@@ -97,27 +97,29 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        for txn in transactions:
-            cursor.execute('''
-                INSERT INTO transaction_details (
-                    search_id, transaction_id, bank_id, date,
-                    debit_amount, credit_amount, status, customer_name,
-                    branch, reference_no, description, error_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                search_id,
-                txn.get('transaction_id'),
-                txn.get('bank_id'),
-                txn.get('date'),
-                txn.get('debit_amount'),
-                txn.get('credit_amount'),
-                txn.get('status'),
-                txn.get('customer_name'),
-                txn.get('branch'),
-                txn.get('reference_no'),
-                txn.get('description'),
-                txn.get('error_type')
-            ))
+        # Use executemany for much faster batch inserts
+        transaction_records = [(
+            search_id,
+            txn.get('transaction_id'),
+            txn.get('bank_id'),
+            txn.get('date'),
+            txn.get('debit_amount'),
+            txn.get('credit_amount'),
+            txn.get('status'),
+            txn.get('customer_name'),
+            txn.get('branch'),
+            txn.get('reference_no'),
+            txn.get('description'),
+            txn.get('error_type')
+        ) for txn in transactions]
+        
+        cursor.executemany('''
+            INSERT INTO transaction_details (
+                search_id, transaction_id, bank_id, date,
+                debit_amount, credit_amount, status, customer_name,
+                branch, reference_no, description, error_type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', transaction_records)
         
         conn.commit()
         conn.close()
